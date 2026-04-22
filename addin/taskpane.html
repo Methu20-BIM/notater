@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Notater</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Segoe UI", sans-serif; }
+    body { background: #f5f5f5; padding: 12px; }
+
+    .header {
+      background: #1a5276;
+      color: white;
+      padding: 12px 14px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .header h1 { font-size: 16px; font-weight: 600; }
+    .header p  { font-size: 11px; opacity: 0.8; margin-top: 2px; }
+
+    .btn {
+      width: 100%;
+      padding: 11px 14px;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: opacity 0.15s;
+    }
+    .btn:active  { opacity: 0.8; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: #1a5276; color: white; }
+    .btn-green   { background: #1e8449; color: white; }
+    .btn-gray    { background: #808b96; color: white; }
+
+    .status-box {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+    .status-label { font-size: 10px; color: #888; text-transform: uppercase; }
+    .status-text  { font-size: 13px; color: #222; margin-top: 2px; }
+    .dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #aaa;
+      margin-right: 6px;
+    }
+    .dot.green  { background: #27ae60; }
+    .dot.orange { background: #e67e22; }
+    .dot.red    { background: #e74c3c; }
+
+    .model-box {
+      font-size: 11px;
+      color: #666;
+      background: #eaf2ff;
+      border-radius: 4px;
+      padding: 6px 10px;
+      margin-bottom: 12px;
+    }
+
+    .divider { border: none; border-top: 1px solid #ddd; margin: 8px 0; }
+
+    .hint {
+      font-size: 11px;
+      color: #888;
+      line-height: 1.5;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Notater</h1>
+  <p>Matteassistent for Word</p>
+</div>
+
+<div class="status-box">
+  <div class="status-label">Status</div>
+  <div class="status-text">
+    <span class="dot" id="dot"></span>
+    <span id="statusText">Kobler til...</span>
+  </div>
+</div>
+
+<div class="model-box" id="modelBox">
+  Laster modellinfo...
+</div>
+
+<button class="btn btn-primary" id="solveBtn" onclick="solveTasks()">
+  ▶ Løs oppgaver
+</button>
+
+<button class="btn btn-green" id="exportBtn" onclick="exportDoc()">
+  📄 Lag innleveringskopi
+</button>
+
+<hr class="divider">
+
+<p class="hint">
+  Skriv matteoppgaven din i Word og legg til <strong>- løs</strong> på slutten av linjen.
+  Trykk deretter på <strong>Løs oppgaver</strong>.
+</p>
+
+<script>
+const BASE = "http://127.0.0.1:5050";
+
+async function fetchStatus() {
+  try {
+    const r = await fetch(`${BASE}/status`, { signal: AbortSignal.timeout(3000) });
+    const d = await r.json();
+    const dot  = document.getElementById("dot");
+    const text = document.getElementById("statusText");
+    const box  = document.getElementById("modelBox");
+
+    text.textContent = d.state || "Klar";
+    box.textContent  = `Modell: ${d.model || "ukjent"}`;
+
+    const s = (d.state || "").toLowerCase();
+    if (s.includes("feil") || s.includes("advarsel")) {
+      dot.className = "dot orange";
+    } else if (s.includes("løser") || s.includes("leser")) {
+      dot.className = "dot orange";
+    } else {
+      dot.className = "dot green";
+    }
+  } catch {
+    document.getElementById("dot").className = "dot red";
+    document.getElementById("statusText").textContent = "Notater-appen kjører ikke";
+    document.getElementById("modelBox").textContent   = "Start start.bat for å aktivere";
+  }
+}
+
+async function solveTasks() {
+  const btn = document.getElementById("solveBtn");
+  btn.disabled = true;
+  btn.textContent = "⏳ Løser...";
+  setStatus("Løser oppgaver...", "orange");
+
+  try {
+    const r = await fetch(`${BASE}/solve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      signal: AbortSignal.timeout(200000)
+    });
+    const d = await r.json();
+
+    if (d.ok && d.count === 0) {
+      setStatus("Ingen oppgaver merket med - løs", "green");
+    } else if (d.ok) {
+      setStatus(`Ferdig – ${d.count} oppgave(r) løst ✓`, "green");
+    } else {
+      setStatus("Feil: " + (d.error || "ukjent"), "red");
+    }
+  } catch (e) {
+    setStatus("Feil: " + e.message, "red");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "▶ Løs oppgaver";
+  }
+}
+
+async function exportDoc() {
+  const btn = document.getElementById("exportBtn");
+  btn.disabled = true;
+  btn.textContent = "⏳ Lager kopi...";
+
+  try {
+    const r = await fetch(`${BASE}/export`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      signal: AbortSignal.timeout(30000)
+    });
+    const d = await r.json();
+    if (d.ok) {
+      setStatus("Innleveringskopi lagret! ✓", "green");
+    } else {
+      setStatus("Feil: " + (d.error || "ukjent"), "red");
+    }
+  } catch (e) {
+    setStatus("Feil: " + e.message, "red");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "📄 Lag innleveringskopi";
+  }
+}
+
+function setStatus(msg, color) {
+  document.getElementById("statusText").textContent = msg;
+  const dotEl = document.getElementById("dot");
+  dotEl.className = "dot " + (color || "green");
+}
+
+// Poll status hvert 3. sekund
+fetchStatus();
+setInterval(fetchStatus, 3000);
+</script>
+</body>
+</html>
