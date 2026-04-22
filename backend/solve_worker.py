@@ -24,7 +24,15 @@ MODEL = "deepseek-r1:7b"
 TRIG = re.compile(r"[-\u2013\u2014]\s*l[\u00f8o\u00f6]ss?[\s!.]*$", re.IGNORECASE)
 
 # Overskrifter som skal ha fet skrift
-BOLD_STARTS = ("l\u00f8sning:", "losning:", "geogebra:")
+BOLD_STARTS = (
+    "l\u00f8sning:", "losning:",
+    "geogebra:",
+    "forklaring:",
+    "utregning:",
+    "oppgave a)", "oppgave b)", "oppgave c)", "oppgave d)",
+    "oppgave e)", "oppgave f)",
+    "svar:",
+)
 
 
 def get_doc():
