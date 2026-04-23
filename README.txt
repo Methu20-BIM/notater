@@ -31,11 +31,19 @@ KOMME I GANG
 
 KRAV
 ────
-  • Windows 10/11
+  • Windows 10/11  ELLER  macOS 12+  (Linux fungerer delvis)
   • Microsoft Word (installert)
-  • Ollama (installeres automatisk ved install.bat)
+  • Ollama (https://ollama.com/download – brew install ollama på Mac)
   • Modell: deepseek-r1:7b (lastes ned automatisk, ca. 4 GB)
-  • Python 3.8+ (installert av install.bat)
+  • Python 3.10+
+
+INSTALLASJON
+────────────
+  Windows:  Dobbeltklikk install.bat, start med start.bat / matte.lnk
+  macOS:    chmod +x install.sh start.command
+            ./install.sh
+            ./start.command
+            (Word må gi tilgang første gang – godta AppleScript-dialogen)
 
 
 TRIGGERORD
