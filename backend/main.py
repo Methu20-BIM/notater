@@ -188,11 +188,11 @@ def run_all():
     except Exception:
         pass
 
-    # Start menylinjeapp (macOS) eller Tkinter-panel (Windows)
+    # Start flytende popup (macOS) eller Tkinter-panel (Windows)
     import platform
     if platform.system() == "Darwin":
-        from menubar import launch_menubar
-        launch_menubar()
+        from popup import launch_popup
+        launch_popup()
     else:
         from panel import launch_panel
         launch_panel()
