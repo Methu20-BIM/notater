@@ -100,12 +100,6 @@ def find_tasks(doc):
         if not TRIG.search(t):
             continue
 
-        # Kun ekte oppgaveparagrafer starter med "DEL 2, Oppgave" eller "Oppgave"
-        # Modellen bruker aldri dette prefikset i løsningsteksten.
-        tl = t.lstrip().lower()
-        if not (tl.startswith("del 2") or tl.startswith("oppgave")):
-            continue
-
         # Allerede løst hvis noen av de neste paragrafene inneholder løsningsoverskrift
         if _is_already_solved(doc, i):
             continue
