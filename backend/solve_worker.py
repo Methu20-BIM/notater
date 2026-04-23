@@ -7,6 +7,7 @@ Finner, rydder og løser oppgaver i åpent Word-dokument.
 import sys
 import json
 import re
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -25,12 +26,21 @@ TRIG = re.compile(r"[-\u2013\u2014]\s*l[\u00f8o\u00f6]ss?[\s!.]*$", re.IGNORECAS
 
 # Overskrifter som skal ha fet skrift
 BOLD_STARTS = (
-    "l\u00f8sning:", "losning:",
+    "hva vi skal finne:",
+    "matematisk l\u00f8sning:",
     "geogebra:",
-    "forklaring:",
-    "utregning:",
-    "oppgave a)", "oppgave b)", "oppgave c)", "oppgave d)",
-    "oppgave e)", "oppgave f)",
+    "geogebra-kontroll:",
+    "rimelighetsvurdering:",
+    "svar:",
+)
+
+# Alle mulige overskrifter i en løsningsblokk (brukes til å oppdage om oppgaven er løst)
+SOLUTION_HEADERS = (
+    "hva vi skal finne:",
+    "matematisk l\u00f8sning:",
+    "geogebra:",
+    "geogebra-kontroll:",
+    "rimelighetsvurdering:",
     "svar:",
 )
 
@@ -49,40 +59,36 @@ def get_doc():
     return word, None
 
 
-def _next_nonempty_text(doc, start_idx):
-    """Returnerer teksten i første ikke-tomme paragraf etter start_idx (lowercase)."""
+def _is_already_solved(doc, task_idx):
+    """
+    Sjekker om oppgaven på task_idx allerede er løst.
+    Skanner de neste 15 paragrafene etter oppgaven for løsningsoverskrifter.
+    Stopper hvis en ny trigger-oppgave dukker opp.
+    """
     n = doc.Paragraphs.Count
-    j = start_idx + 1
-    while j <= n and not doc.Paragraphs(j).Range.Text.strip():
+    j = task_idx + 1
+    limit = min(task_idx + 15, n)
+    while j <= limit:
+        txt = doc.Paragraphs(j).Range.Text.strip().lower()
+        raw = doc.Paragraphs(j).Range.Text.rstrip("\r\n\x07")
+        if TRIG.search(raw):   # ny oppgave funnet – stopp
+            return False
+        if any(txt.startswith(h) for h in SOLUTION_HEADERS):
+            return True
         j += 1
-    if j <= n:
-        return doc.Paragraphs(j).Range.Text.strip().lower()
-    return ""
+    return False
+
+
+def _is_solution_header(text: str) -> bool:
+    return any(text.startswith(h) for h in SOLUTION_HEADERS)
 
 
 def clean_failed_solutions(doc):
-    """Fjerner løsningsblokker som begynner med 'Løsning:' og inneholder 'Feil'."""
-    i = 1
-    while i <= doc.Paragraphs.Count:
-        t = doc.Paragraphs(i).Range.Text.strip().lower()
-        if t.startswith("l\u00f8sning:") or t.startswith("losning:"):
-            has_feil = False
-            j = i + 1
-            while j <= doc.Paragraphs.Count:
-                txt = doc.Paragraphs(j).Range.Text.strip().lower()
-                if txt.startswith("l\u00f8sning:") or txt.startswith("losning:"):
-                    break
-                if TRIG.search(doc.Paragraphs(j).Range.Text.rstrip("\r\n\x07")):
-                    break
-                if txt.startswith("feil"):
-                    has_feil = True
-                j += 1
-            if has_feil:
-                start = doc.Paragraphs(i).Range.Start
-                end   = doc.Paragraphs(min(j - 1, doc.Paragraphs.Count)).Range.End
-                doc.Range(start, end).Delete()
-                continue
-        i += 1
+    """
+    Deaktivert: solve_worker setter aldri inn løsninger som starter med 'Feil:'
+    fordi solve_task() filtrerer dem bort. Ingen opprydding nødvendig.
+    """
+    pass
 
 
 def find_tasks(doc):
@@ -93,10 +99,17 @@ def find_tasks(doc):
         t = doc.Paragraphs(i).Range.Text.rstrip("\r\n\x07")
         if not TRIG.search(t):
             continue
-        # Allerede løst hvis neste ikke-tomme paragraf starter med "Løsning:"
-        nxt = _next_nonempty_text(doc, i)
-        if nxt.startswith("l\u00f8sning:") or nxt.startswith("losning:"):
+
+        # Kun ekte oppgaveparagrafer starter med "DEL 2, Oppgave" eller "Oppgave"
+        # Modellen bruker aldri dette prefikset i løsningsteksten.
+        tl = t.lstrip().lower()
+        if not (tl.startswith("del 2") or tl.startswith("oppgave")):
             continue
+
+        # Allerede løst hvis noen av de neste paragrafene inneholder løsningsoverskrift
+        if _is_already_solved(doc, i):
+            continue
+
         task_text = TRIG.sub("", t).strip()
         if task_text:
             tasks.append({"index": i, "text": task_text})
@@ -118,36 +131,37 @@ def insert_solution(doc, idx, solution_text):
             lines.append(s)
             prev_empty = False
 
-    block = "\n" + "\n".join(lines)
-    doc.Paragraphs(idx).Range.InsertAfter(block)
+    block = "\n" + "\n".join(lines) + "\n"
+    for attempt in range(5):
+        try:
+            doc.Paragraphs(idx).Range.InsertAfter(block)
+            break
+        except Exception:
+            time.sleep(2)
 
-    # Formatering via Find & Replace
-    for line in lines:
+    # Formater direkte via paragrafindeks – unngår treg Find & Replace
+    for offset, line in enumerate(lines, start=1):
         if not line:
             continue
         ll = line.lower()
-        search_text = line[:48]
+        try:
+            para = doc.Paragraphs(idx + offset)
+            para.Format.LineSpacingRule = 1   # 1.5x
+            para.Format.SpaceAfter      = 4
+            if ll.startswith("svar:"):
+                para.Range.Font.Bold  = True
+                para.Range.Font.Color = 0x006400  # mørk grønn
+            elif any(ll.startswith(h) for h in BOLD_STARTS):
+                para.Range.Font.Bold = True
+        except Exception:
+            pass
 
-        f = doc.Content.Find
-        f.ClearFormatting()
-        f.Replacement.ClearFormatting()
-        f.Text             = search_text
-        f.Replacement.Text = search_text
-
-        if ll.startswith("svar:"):
-            f.Replacement.Font.Bold  = True
-            f.Replacement.Font.Color = 0x006400  # mørk grønn
-            f.Execute(Replace=1)
-        elif any(ll.startswith(h) for h in BOLD_STARTS):
-            f.Replacement.Font.Bold = True
-            f.Execute(Replace=1)
-
-    # 1.5 linjeavstand (wdLineSpace1pt5 = 1) på innsatte paragrafer
+    # 1.5 linjeavstand på eventuelle tomme linjer mellom seksjonene
     n = doc.Paragraphs.Count
-    k = idx + 1
+    k = idx + len(lines) + 1
     while k <= n:
         para_text = doc.Paragraphs(k).Range.Text.rstrip("\r\n\x07")
-        if TRIG.search(para_text):
+        if TRIG.search(para_text) or para_text.strip():
             break
         try:
             doc.Paragraphs(k).Format.LineSpacingRule = 1
