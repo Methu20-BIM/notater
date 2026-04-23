@@ -6,7 +6,7 @@ from utils import find_matte_docx
 from solver import solve_task, ensure_ollama_running
 from pathlib import Path
 
-MODEL = "deepseek-r1:7b"
+MODEL = "qwen3:8b"
 SEP   = "\u2500" * 44
 
 doc_path = find_matte_docx()

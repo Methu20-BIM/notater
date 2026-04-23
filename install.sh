@@ -73,16 +73,31 @@ fi
 echo " Ollama funnet."
 ollama serve >/dev/null 2>&1 &
 sleep 3
-echo " Laster ned deepseek-r1:7b (ca. 4 GB – kan ta noen minutter)..."
-ollama pull deepseek-r1:7b
+echo " Laster ned qwen3:8b (ca. 5 GB – kan ta noen minutter)..."
+ollama pull qwen3:8b
 
-# ── [5/5] Ferdig ─────────────────────────────────────────────────────────────
+# ── [5/5] Opprett matte.docx og avslutt ─────────────────────────────────────
+echo
+echo "[5/5] Oppretter matte.docx med eksempeloppgave..."
+if [ ! -f "$NOTATER_DIR/matte.docx" ]; then
+    "$VENV_DIR/bin/python" -c "
+from docx import Document
+doc = Document()
+doc.add_paragraph('Deriver f(x) = x\u00b3 + 2x - 5 - l\u00f8s')
+doc.save('$NOTATER_DIR/matte.docx')
+"
+    echo " matte.docx opprettet."
+else
+    echo " matte.docx finnes allerede."
+fi
+
 echo
 echo " ================================================"
 echo "  Installasjon fullført!"
 echo " ================================================"
 echo
 echo "  Start med:  ./start.command"
+echo "  Eller:      claude   (Claude Code åpner alt automatisk)"
 echo "  Åpne matte.docx i Word og skriv en oppgave"
 echo "  som slutter på  - løs  og klikk Løs oppgaver."
 echo

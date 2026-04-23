@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from word_backend import get_doc
 from solver import solve_task, ensure_ollama_running
 
-MODEL = "deepseek-r1:7b"
+MODEL = "qwen3:8b"
 
 TRIG = re.compile(r"[-\u2013\u2014]\s*l[\u00f8o\u00f6]ss?[\s!.]*$", re.IGNORECASE)
 

@@ -3,7 +3,7 @@
 AI-assistent som løser matematikkoppgaver direkte i Microsoft Word.  
 Skriv en oppgave, legg til `- løs` på slutten, og klikk **Løs oppgaver**.
 
-Bruker [Ollama](https://ollama.com) lokalt med modellen `deepseek-r1:7b` – ingen internettforbindelse til AI nødvendig.
+Bruker [Ollama](https://ollama.com) lokalt med modellen `qwen3:8b` – ingen internettforbindelse til AI nødvendig.
 
 ---
 
@@ -32,7 +32,21 @@ Start etterpå med `.\start.bat` eller snarveien **matte** på skrivebordet.
 
 ## Installasjon – Mac
 
-### 1. Installer avhengigheter
+### Alternativ A: Claude Code (anbefalt – ett steg)
+
+```bash
+git clone https://github.com/Methu20-BIM/notater.git
+cd notater
+claude
+```
+
+Claude Code leser `CLAUDE.md` og setter opp alt automatisk: installerer pakker, laster ned modellen, lager `matte.docx` og åpner den i Word.
+
+---
+
+### Alternativ B: Manuell installasjon
+
+#### 1. Installer avhengigheter
 
 ```bash
 # Homebrew (hvis ikke installert)
@@ -42,7 +56,7 @@ Start etterpå med `.\start.bat` eller snarveien **matte** på skrivebordet.
 brew install python ollama
 ```
 
-### 2. Klon og installer
+#### 2. Klon og installer
 
 ```bash
 git clone https://github.com/Methu20-BIM/notater.git
@@ -51,9 +65,9 @@ chmod +x install.sh start.command
 ./install.sh
 ```
 
-`install.sh` laster ned `deepseek-r1:7b` automatisk (ca. 4 GB, tar noen minutter).
+`install.sh` laster ned `qwen3:8b` automatisk (ca. 5 GB, tar noen minutter) og lager `matte.docx`.
 
-### 3. Start
+#### 3. Start
 
 ```bash
 ./start.command

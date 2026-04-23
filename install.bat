@@ -58,8 +58,8 @@ if errorlevel 1 (
 echo  Ollama funnet.
 start /b ollama serve > nul 2>&1
 timeout /t 3 /nobreak > nul
-echo  Laster ned deepseek-r1:7b (ca. 4 GB)...
-ollama pull deepseek-r1:7b
+echo  Laster ned qwen3:8b (ca. 5 GB)...
+ollama pull qwen3:8b
 echo.
 
 echo [5/5] Setter opp autostart og snarvei...

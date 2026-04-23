@@ -26,7 +26,7 @@ from utils import find_matte_docx, open_in_word, get_notater_dir
 
 # ── Konfigurasjon ────────────────────────────────────────────────────────────
 PORT       = 5050
-MODEL_NAME = "deepseek-r1:7b"
+MODEL_NAME = "qwen3:8b"
 app        = Flask(__name__)
 CORS(app)
 

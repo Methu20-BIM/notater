@@ -293,7 +293,7 @@ def _clean(text: str) -> str:
     return text.strip()
 
 
-def solve_task(task_text: str, model_name: str = "deepseek-r1:7b") -> str:
+def solve_task(task_text: str, model_name: str = "qwen3:8b") -> str:
     prompt = f"{SYSTEM_PROMPT}\n\nOppgave:\n{task_text}"
 
     payload = {
@@ -336,7 +336,7 @@ def get_model_status(model_name: str) -> dict:
 
 def recommend_model(ram_gb: float, vram_gb: float) -> str:
     if vram_gb >= 4 or ram_gb >= 12:
-        return "deepseek-r1:7b"
+        return "qwen3:8b"
     elif ram_gb >= 8:
         return "llama3.1:8b"
     else:
@@ -344,6 +344,6 @@ def recommend_model(ram_gb: float, vram_gb: float) -> str:
 
 
 if __name__ == "__main__":
-    ensure_ollama_running("deepseek-r1:7b")
+    ensure_ollama_running("qwen3:8b")
     svar = solve_task("Deriver f(x) = x³ + 2x - 5")
     print(svar)

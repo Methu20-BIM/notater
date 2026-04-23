@@ -1,6 +1,6 @@
 ═══════════════════════════════════════════════════
   NOTATER – Matteassistent for Word
-  R1/R2 eksamen | deepseek-r1:7b via Ollama
+  R1/R2 eksamen | qwen3:8b via Ollama
 ═══════════════════════════════════════════════════
 
 MAPPESTRUKTUR
@@ -34,7 +34,7 @@ KRAV
   • Windows 10/11  ELLER  macOS 12+  (Linux fungerer delvis)
   • Microsoft Word (installert)
   • Ollama (https://ollama.com/download – brew install ollama på Mac)
-  • Modell: deepseek-r1:7b (lastes ned automatisk, ca. 4 GB)
+  • Modell: qwen3:8b (lastes ned automatisk, ca. 4 GB)
   • Python 3.10+
 
 INSTALLASJON
