@@ -26,7 +26,7 @@ from utils import find_matte_docx, open_in_word, get_notater_dir
 
 # ── Konfigurasjon ────────────────────────────────────────────────────────────
 PORT       = 5050
-MODEL_NAME = "qwen3:8b"
+MODEL_NAME = "deepseek-r1:7b"
 app        = Flask(__name__)
 CORS(app)
 
@@ -49,7 +49,11 @@ def status():
 def solve_endpoint():
     set_status("Løser oppgaver...")
     try:
-        worker = Path(__file__).parent / "solve_worker.py"
+        import platform
+        if platform.system() == "Darwin":
+            worker = Path(__file__).parent / "solve_worker_macos.py"
+        else:
+            worker = Path(__file__).parent / "solve_worker.py"
         result = subprocess.run(
             [sys.executable, str(worker)],
             capture_output=True, text=True, timeout=300,
@@ -145,13 +149,15 @@ def run_all():
     # Start Ollama/status i bakgrunn
     threading.Thread(target=startup_sequence, daemon=True).start()
 
-    # Åpne matte.docx etter kort pause
-    def delayed_open():
-        time.sleep(2)
-        doc = find_matte_docx()
-        if doc:
-            open_in_word(doc)
-    threading.Thread(target=delayed_open, daemon=True).start()
+    # Åpne matte.docx etter kort pause (kun på Windows med Word installert)
+    import platform
+    if platform.system() != "Darwin":
+        def delayed_open():
+            time.sleep(2)
+            doc = find_matte_docx()
+            if doc:
+                open_in_word(doc)
+        threading.Thread(target=delayed_open, daemon=True).start()
 
     # Prøv å starte systray-ikon i bakgrunn
     try:
@@ -182,9 +188,14 @@ def run_all():
     except Exception:
         pass
 
-    # Tkinter-panel i hoved-tråden (blokkerer til vinduet lukkes)
-    from panel import launch_panel
-    launch_panel()
+    # Start menylinjeapp (macOS) eller Tkinter-panel (Windows)
+    import platform
+    if platform.system() == "Darwin":
+        from menubar import launch_menubar
+        launch_menubar()
+    else:
+        from panel import launch_panel
+        launch_panel()
 
 
 # ── Inngangspunkt ─────────────────────────────────────────────────────────────
