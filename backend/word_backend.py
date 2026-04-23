@@ -1,44 +1,57 @@
 # -*- coding: utf-8 -*-
 """
-word_backend.py – Plattform-abstraksjon for Microsoft Word-automatisering.
+word_backend.py – Cross-platform Word-automatisering.
+  Windows : win32com COM (live redigering uten filskriving)
+  Mac     : python-docx + AppleScript (lagre → rediger → reload)
 
-Gir samme API på Windows (win32com) og Mac (appscript).
-Bruk get_doc(), så får du en Doc-instans med:
-  - doc.paragraph_count()
-  - doc.paragraph_text(i)          # 1-indeksert
-  - doc.insert_after(i, text)
-  - doc.set_paragraph_format(i, bold=, color=, line_spacing=, space_after=)
-  - doc.save()
-  - doc.delete_all()
-  - doc.get_autosave() / set_autosave(bool)
+Felles API:
+  doc.paragraph_count()
+  doc.paragraph_text(i)            # 1-indeksert
+  doc.insert_after(i, block)       # block = newline-separert tekst
+  doc.set_paragraph_format(i, bold, color, line_spacing, space_after)
+  doc.save()
+  doc.get_autosave() / set_autosave(bool)
 """
 
 import platform
-import sys
+import subprocess
 from pathlib import Path
 
 IS_WIN = platform.system() == "Windows"
 IS_MAC = platform.system() == "Darwin"
 
 
-# --------------------------- Windows (win32com) ---------------------------
+# ── Mac-hjelper ───────────────────────────────────────────────────────────────
+def _applescript(script: str) -> str:
+    r = subprocess.run(["osascript", "-e", script],
+                       capture_output=True, text=True)
+    return r.stdout.strip()
+
+
+# ── Windows-implementasjon (win32com) ─────────────────────────────────────────
 class _WinDoc:
-    def __init__(self, word_app, doc):
-        self.app = word_app
-        self.doc = doc
+    def __init__(self, word_app, com_doc):
+        self._app = word_app
+        self._doc = com_doc
 
-    def paragraph_count(self):
-        return self.doc.Paragraphs.Count
+    def paragraph_count(self) -> int:
+        return self._doc.Paragraphs.Count
 
-    def paragraph_text(self, i):
-        return self.doc.Paragraphs(i).Range.Text
+    def paragraph_text(self, i: int) -> str:
+        return self._doc.Paragraphs(i).Range.Text
 
-    def insert_after(self, i, text):
-        self.doc.Paragraphs(i).Range.InsertAfter(text)
+    def insert_after(self, i: int, block: str):
+        import time
+        for _ in range(5):
+            try:
+                self._doc.Paragraphs(i).Range.InsertAfter(block)
+                return
+            except Exception:
+                time.sleep(2)
 
-    def set_paragraph_format(self, i, bold=None, color=None,
+    def set_paragraph_format(self, i: int, bold=None, color=None,
                               line_spacing=None, space_after=None):
-        para = self.doc.Paragraphs(i)
+        para = self._doc.Paragraphs(i)
         if line_spacing is not None:
             para.Format.LineSpacingRule = line_spacing
         if space_after is not None:
@@ -49,129 +62,132 @@ class _WinDoc:
             para.Range.Font.Color = color
 
     def save(self):
-        self.doc.Save()
-
-    def delete_all(self):
-        self.doc.Range().Delete()
+        self._doc.Save()
 
     def get_autosave(self):
         try:
-            return self.doc.AutoSaveOn
+            return self._doc.AutoSaveOn
         except Exception:
             return None
 
     def set_autosave(self, value):
         try:
-            self.doc.AutoSaveOn = value
+            if value is not None:
+                self._doc.AutoSaveOn = value
         except Exception:
             pass
 
 
-def _get_doc_windows(target_name: str):
+def _get_win_doc(target_name: str):
     import pythoncom
     pythoncom.CoInitialize()
     import win32com.client as win32
     word = win32.GetActiveObject("Word.Application")
     for i in range(1, word.Documents.Count + 1):
         d = word.Documents(i)
-        name = d.FullName.split("/")[-1].split("\\")[-1].lower()
+        name = d.FullName.replace("\\", "/").split("/")[-1].lower()
         if name == target_name.lower():
             return _WinDoc(word, d)
     return None
 
 
-# ------------------------------ Mac (appscript) ---------------------------
+# ── Mac-implementasjon (python-docx + AppleScript) ───────────────────────────
 class _MacDoc:
-    # Mac Word mapper tegnfarge via RGB-heltall. Line spacing: 1=single, 2=1.5, 3=double.
-    def __init__(self, app, doc):
-        self.app = app
-        self.doc = doc
+    def __init__(self, path: Path):
+        self.path = path
+        # Lagre Word-dokumentet først slik at filen på disk er oppdatert
+        _applescript('tell application "Microsoft Word" to save document 1')
+        from docx import Document
+        self._doc = Document(str(path))
 
-    def paragraph_count(self):
-        return len(self.doc.paragraphs())
+    def paragraph_count(self) -> int:
+        return len(self._doc.paragraphs)
 
-    def paragraph_text(self, i):
-        return self.doc.paragraphs[i].text_object.content()
+    def paragraph_text(self, i: int) -> str:
+        # Legg til \r for å matche Windows COM-oppførsel (rstrip i solve_worker fjerner det)
+        return self._doc.paragraphs[i - 1].text + "\r"
 
-    def insert_after(self, i, text):
-        # Sett inn etter siste tegn i paragrafen (via text_object.end_of_content)
-        para = self.doc.paragraphs[i]
-        end = para.text_object.end_of_content_of.offset()
-        self.doc.create_range(start=end, end=end).content.set(text)
+    def insert_after(self, i: int, block: str):
+        """Setter inn newline-separerte linjer som nye paragrafer etter posisjon i."""
+        from docx.oxml import OxmlElement
+        from docx.oxml.ns import qn
 
-    def set_paragraph_format(self, i, bold=None, color=None,
+        lines = block.split("\n")
+        ref_elem = self._doc.paragraphs[i - 1]._element
+
+        # Sett inn i omvendt rekkefølge etter samme referanseelement → riktig rekkefølge
+        for line in reversed(lines):
+            new_p = OxmlElement("w:p")
+            if line:
+                new_r = OxmlElement("w:r")
+                new_t = OxmlElement("w:t")
+                new_t.text = line
+                if line.startswith(" ") or line.endswith(" "):
+                    new_t.set(qn("xml:space"), "preserve")
+                new_r.append(new_t)
+                new_p.append(new_r)
+            ref_elem.addnext(new_p)
+
+    def set_paragraph_format(self, i: int, bold=None, color=None,
                               line_spacing=None, space_after=None):
-        para = self.doc.paragraphs[i]
-        tobj = para.text_object
-        if bold is not None:
-            tobj.font_object.bold.set(bold)
-        if color is not None:
-            # Forventer BGR-int som på Windows (0x006400). Konverter til RGB.
-            r = color & 0xFF
-            g = (color >> 8) & 0xFF
-            b = (color >> 16) & 0xFF
-            try:
-                tobj.font_object.color_index.set((r, g, b))
-            except Exception:
-                pass
-        if line_spacing is not None:
-            # 1 = single (Win), 1 = single (Mac). Behold verdien direkte.
-            try:
-                para.paragraph_format.line_spacing_rule.set(line_spacing)
-            except Exception:
-                pass
+        from docx.shared import Pt, RGBColor
+        from docx.enum.text import WD_LINE_SPACING
+
+        para = self._doc.paragraphs[i - 1]
+        pf = para.paragraph_format
+
+        if line_spacing == 1:   # Windows 1 = 1.5 linjeavstand
+            pf.line_spacing_rule = WD_LINE_SPACING.ONE_POINT_FIVE
         if space_after is not None:
-            try:
-                para.paragraph_format.space_after.set(space_after)
-            except Exception:
-                pass
+            pf.space_after = Pt(space_after)
+
+        if bold is not None or color is not None:
+            runs = para.runs
+            if not runs:
+                runs = [para.add_run()]
+            for run in runs:
+                if bold is not None:
+                    run.bold = bold
+                if color is not None:
+                    # Windows 0xBBGGRR → RGBColor(R, G, B)
+                    r = color & 0xFF
+                    g = (color >> 8) & 0xFF
+                    b = (color >> 16) & 0xFF
+                    run.font.color.rgb = RGBColor(r, g, b)
 
     def save(self):
-        self.doc.save()
-
-    def delete_all(self):
-        self.doc.text_object.delete()
+        self._doc.save(str(self.path))
+        # Last inn igjen i Word fra disk
+        _applescript('tell application "Microsoft Word" to revert document 1')
 
     def get_autosave(self):
-        try:
-            return self.doc.auto_save_on.get()
-        except Exception:
-            return None
+        return None  # Ikke aktuelt med filbasert redigering
 
     def set_autosave(self, value):
-        try:
-            self.doc.auto_save_on.set(value)
-        except Exception:
-            pass
+        pass
 
 
-def _get_doc_mac(target_name: str):
-    from appscript import app
-    word = app("Microsoft Word")
-    for d in word.documents():
-        try:
-            name = d.name.get().lower()
-        except Exception:
-            continue
-        if name == target_name.lower():
-            return _MacDoc(word, d)
-    return None
-
-
-# --------------------------------- API ------------------------------------
-def get_doc_by_name(target_name: str):
-    """Returner doc-wrapper for åpent Word-dokument, eller None."""
-    if IS_WIN:
-        return _get_doc_windows(target_name)
-    if IS_MAC:
-        return _get_doc_mac(target_name)
-    raise RuntimeError(f"Plattform {platform.system()} ikke støttet")
-
-
-def get_doc():
-    """Finn matte.docx og returner doc-wrapper."""
+def _get_mac_doc(target_name: str):
     from utils import find_matte_docx
-    p = find_matte_docx()
-    if not p:
+    path = find_matte_docx()
+    if not path:
         return None
-    return get_doc_by_name(Path(p).name)
+    if Path(path).name.lower() != target_name.lower():
+        return None
+    return _MacDoc(Path(path))
+
+
+# ── Offentlig API ─────────────────────────────────────────────────────────────
+def get_doc():
+    """Returnerer platform-tilpasset doc-wrapper for åpent matte.docx, eller None."""
+    from utils import find_matte_docx
+    path = find_matte_docx()
+    if not path:
+        return None
+    target = Path(path).name
+
+    if IS_WIN:
+        return _get_win_doc(target)
+    if IS_MAC:
+        return _get_mac_doc(target)
+    raise RuntimeError(f"Plattform {platform.system()} ikke støttet")
